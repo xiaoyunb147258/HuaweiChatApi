@@ -98,6 +98,7 @@ class MainActivity : android.app.Activity() {
     }
 
     private fun selectTab(i: Int) {
+        stopLogRefresh()
         current = i
         for (t in 0 until tabs.childCount) {
             val tv = tabs.getChildAt(t) as TextView
@@ -516,6 +517,9 @@ class MainActivity : android.app.Activity() {
     }
 
     // ---------- 日志页 ----------
+    private val logRefresher = android.os.Handler(android.os.Looper.getMainLooper())
+    private var logRunning = false
+
     private fun pageLogs(): View {
         val tv = TextView(this).apply {
             textSize = 12f
@@ -524,19 +528,42 @@ class MainActivity : android.app.Activity() {
             typeface = Typeface.MONOSPACE
             text = if (Logs.list().isEmpty()) "暂无日志" else Logs.list().joinToString("\n")
         }
+        // 自动滚动到底部，盯着最新一条
+        fun render() {
+            val all = Logs.list()
+            val t = if (all.isEmpty()) "暂无日志" else all.joinToString("\n")
+            if (tv.text?.toString() != t) tv.text = t
+        }
+        tv.tag = Runnable {
+            render()
+            if (logRunning) logRefresher.postDelayed(tv.tag as Runnable, 1000)
+        }
+        logRunning = true
+        logRefresher.post(tv.tag as Runnable)
+
         val card1 = card("请求日志", LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(Button(this@MainActivity).apply {
                 text = "清空日志"
-                setOnClickListener { Logs.clear(); selectTab(4) }
+                setOnClickListener { Logs.clear(); render() }
             })
             addView(Button(this@MainActivity).apply {
-                text = "刷新"
-                setOnClickListener { selectTab(4) }
+                text = "复制全部"
+                setOnClickListener {
+                    val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("log", Logs.list().joinToString("\n")))
+                    toast("已复制")
+                }
             })
             addView(tv)
         })
         return scroll(card1)
+    }
+
+    /** 离开日志页时停掉轮询，避免无谓开销 */
+    private fun stopLogRefresh() {
+        logRunning = false
+        logRefresher.removeCallbacksAndMessages(null)
     }
 
     // ---------- 设置（并入状态页底部） ----------
