@@ -84,6 +84,9 @@ class GatewayServer(
                     String(buf, 0, read)
                 } else ""
 
+                // 全量请求日志：只要连上就记，方便区分「请求没到」和「请求到了但出错」
+                log("› $method $path")
+
                 // 鉴权
                 if (apiKey.isNotEmpty()) {
                     val token = auth.removePrefix("Bearer ").trim()
@@ -94,12 +97,17 @@ class GatewayServer(
                     }
                 }
 
+                // 容忍客户端省略 /v1 或 /v1/ 前缀
+                val route = path.removeSuffix("/")
                 when {
-                    path == "/v1/models" && method == "GET" -> handleModels(s)
-                    path == "/v1/chat/completions" && method == "POST" -> handleChat(s, body)
-                    path == "/api/claim" && method == "POST" -> handleClaim(s)
-                    path == "/api/balance" && method == "GET" -> handleBalance(s)
-                    else -> jsonError(s, 404, "not_found", "No such route: $path")
+                    (route == "/v1/models" || route == "/models") && method == "GET" -> handleModels(s)
+                    (route.endsWith("/chat/completions")) && method == "POST" -> handleChat(s, body)
+                    (route == "/api/claim" || route == "/v1/claim") && method == "POST" -> handleClaim(s)
+                    (route == "/api/balance" || route == "/v1/balance") && method == "GET" -> handleBalance(s)
+                    else -> {
+                        jsonError(s, 404, "not_found", "No such route: $path")
+                        log("$method $path → 404 路由不存在")
+                    }
                 }
             }
         } catch (e: Exception) {
