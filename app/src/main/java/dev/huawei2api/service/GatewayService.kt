@@ -25,6 +25,8 @@ class GatewayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                // 同样先提升前台，避免 stopSelf 早于 startForeground 触发超时崩溃
+                startForegroundCompat()
                 stopGateway()
                 stopSelf()
                 return START_NOT_STICKY
@@ -35,8 +37,9 @@ class GatewayService : Service() {
     }
 
     private fun startGateway() {
-        if (server?.isRunning == true) return
+        // 必须先 startForeground：否则由 startForegroundService 启动却没在 5 秒内提升前台，系统会判定超时并崩溃
         startForegroundCompat()
+        if (server?.isRunning == true) return
         val p = App.prefs
         val s = GatewayServer(p.port, p.lanAccess, p.apiKey) { msg ->
             Logs.add(msg)
@@ -133,19 +136,38 @@ class GatewayService : Service() {
     var onState: ((Boolean) -> Unit)? = null
 }
 
-/** 内存日志缓冲 */
+/** 内存日志缓冲 + 落盘，进程被杀后仍可回看 */
 object Logs {
     private val buf = ArrayDeque<String>()
     private const val MAX = 300
+    private var file: java.io.File? = null
+
+    /** 由 App 启动时注入文件句柄，避免此对象持有 Context */
+    fun attach(f: java.io.File) { file = f }
 
     fun add(msg: String) {
         val t = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        val line = "[$t] $msg"
         synchronized(buf) {
-            buf.addFirst("[$t] $msg")
+            buf.addFirst(line)
             while (buf.size > MAX) buf.removeLast()
         }
+        try { file?.appendText(line + "\n") } catch (_: Exception) {}
     }
 
     fun list(): List<String> = synchronized(buf) { buf.toList() }
-    fun clear() = synchronized(buf) { buf.clear() }
+    fun clear() {
+        synchronized(buf) { buf.clear() }
+        try { file?.writeText("") } catch (_: Exception) {}
+    }
+
+    /** 启动时把上次会话的日志读回内存，保证闪退后仍能看到崩溃前的请求记录 */
+    fun restore() {
+        val f = file ?: return
+        if (!f.exists()) return
+        val lines = try { f.readLines().takeLast(MAX) } catch (_: Exception) { return }
+        synchronized(buf) {
+            if (buf.isEmpty()) lines.asReversed().forEach { buf.addLast(it) }
+        }
+    }
 }
