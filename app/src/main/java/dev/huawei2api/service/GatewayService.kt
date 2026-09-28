@@ -47,9 +47,11 @@ class GatewayService : Service() {
             server = s
             Logs.add("网关启动 ${if (p.lanAccess) "0.0.0.0" else "127.0.0.1"}:${p.port}")
             instance?.onState?.invoke(true)
+            FloatService.instance?.refresh()
         } catch (e: Exception) {
             Logs.add("启动失败: ${e.message}")
             instance?.onState?.invoke(false)
+            FloatService.instance?.refresh()
             stopSelf()
         }
     }
@@ -59,6 +61,7 @@ class GatewayService : Service() {
         server = null
         Logs.add("网关已停止")
         instance?.onState?.invoke(false)
+        FloatService.instance?.refresh()
     }
 
     private fun startForegroundCompat() {
@@ -90,10 +93,23 @@ class GatewayService : Service() {
     }
 
     companion object {
+        const val ACTION_START = "dev.huawei2api.START"
         const val ACTION_STOP = "dev.huawei2api.STOP"
+
+        @Volatile
         var instance: GatewayService? = null
             private set
+
         fun isRunning(): Boolean = instance?.server?.isRunning == true
+
+        private fun fire(ctx: android.content.Context, action: String) {
+            val i = Intent(ctx, GatewayService::class.java).setAction(action)
+            if (android.os.Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i)
+            else ctx.startService(i)
+        }
+
+        fun start(ctx: android.content.Context) = fire(ctx, ACTION_START)
+        fun stop(ctx: android.content.Context) = fire(ctx, ACTION_STOP)
     }
 
     var onLog: ((String) -> Unit)? = null
