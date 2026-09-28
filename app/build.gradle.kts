@@ -27,10 +27,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
-        }
-        debug {
-            signingConfig = signingConfigs.getByName("release")
+            // 未提供 keystore 时用 debug 签名，保证 CI 可产出可安装包
+            signingConfig = if (file("../keystore.jks").exists())
+                signingConfigs.getByName("release") else null
         }
     }
 
