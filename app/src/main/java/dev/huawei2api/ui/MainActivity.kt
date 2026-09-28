@@ -45,6 +45,7 @@ class MainActivity : android.app.Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        App.instance.takeCrashLog()?.let { Logs.add("上次崩溃:\n$it") }
         buildLayout()
         selectTab(0)
         // 同步已有 Cookie
@@ -559,10 +560,16 @@ class MainActivity : android.app.Activity() {
                 }
             })
         }
+        // 日志区独立纵向滚动，避免条目过多把整页撑爆
+        val logScroll = ScrollView(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(420))
+            addView(tv)
+        }
         val card1 = card("请求日志", LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             addView(btnRow)
-            addView(tv)
+            addView(logScroll)
         })
         return scroll(card1)
     }
@@ -599,6 +606,7 @@ class MainActivity : android.app.Activity() {
                     FloatService.hide(this@MainActivity)
                 }
                 buildLayout()
+                selectTab(current)
             })
         })
         return c
