@@ -6,7 +6,6 @@ import org.json.JSONObject
 import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.UUID
 
 /** 华为云码道上游接口封装 */
 class Upstream(private val cookieProvider: () -> String) {
@@ -54,7 +53,7 @@ class Upstream(private val cookieProvider: () -> String) {
             .put("repos", JSONArray())
             .toString()
 
-        val conn = open("POST", "/chat/codebaseservice/v1/cloudagent/sessions/$sessionId/messages", sse = true)
+        val conn = open("POST", "/chat/codebaseservice/v1/cloudagent/sessions/$sessionId/messages", sse = true, agentType = "CodeBase")
         conn.outputStream.use { it.write(body.toByteArray()) }
 
         val code = conn.responseCode
@@ -81,6 +80,16 @@ class Upstream(private val cookieProvider: () -> String) {
                 }
             }
         }
+    }
+
+    /** 创建会话，返回 sessionId */
+    fun createSession(): String {
+        val conn = open("POST", "/chat/v1/cloudagent/sessions", agentType = "CodeBase")
+        conn.outputStream.use { it.write("{}".toByteArray()) }
+        val code = conn.responseCode
+        val text = (if (code == 200) conn.inputStream else conn.errorStream).bufferedReader().readText()
+        if (code != 200) throw RuntimeException("CreateSession $code: ${text.take(300)}")
+        return JSONObject(text).getJSONObject("result").getString("session_id")
     }
 
     /** 拉取可用模型 */
@@ -117,6 +126,5 @@ class Upstream(private val cookieProvider: () -> String) {
     }
 
     companion object {
-        fun newSessionId(): String = UUID.randomUUID().toString()
     }
 }
