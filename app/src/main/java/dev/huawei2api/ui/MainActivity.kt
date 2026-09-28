@@ -541,20 +541,27 @@ class MainActivity : android.app.Activity() {
         logRunning = true
         logRefresher.post(tv.tag as Runnable)
 
-        val card1 = card("请求日志", LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(Button(this@MainActivity).apply {
-                text = "清空日志"
+        val ctx = this
+        val btnRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(Button(ctx).apply {
+                text = "清空"
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setOnClickListener { Logs.clear(); render() }
             })
-            addView(Button(this@MainActivity).apply {
+            addView(Button(ctx).apply {
                 text = "复制全部"
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setOnClickListener {
-                    val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val cm = ctx.getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("log", Logs.list().joinToString("\n")))
                     toast("已复制")
                 }
             })
+        }
+        val card1 = card("请求日志", LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(btnRow)
             addView(tv)
         })
         return scroll(card1)
