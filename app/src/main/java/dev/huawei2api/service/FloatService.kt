@@ -1,7 +1,9 @@
 package dev.huawei2api.service
 
+import android.app.Notification
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -33,13 +35,32 @@ class FloatService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // 必须：由 startForegroundService 启动的服务，5 秒内不调 startForeground 会被系统判定超时并崩溃
+        startForegroundCompat()
         showBall()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_HIDE) { hideBall(); return START_NOT_STICKY }
+        if (intent?.action == ACTION_HIDE) { stopSelf(); return START_NOT_STICKY }
         if (ball == null) showBall()
         return START_STICKY
+    }
+
+    private fun startForegroundCompat() {
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            Notification.Builder(this, App.CH_GW) else @Suppress("DEPRECATION") Notification.Builder(this)
+        val n = builder
+            .setContentTitle("悬浮球已开启")
+            .setContentText("拖动移动 · 点击启停网关 · 长按隐藏")
+            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setOngoing(true)
+            .build()
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(2, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(2, n)
+        }
+        Logs.add("悬浮球前台服务已就绪")
     }
 
     private fun showBall() {
