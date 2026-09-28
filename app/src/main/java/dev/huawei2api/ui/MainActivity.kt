@@ -23,6 +23,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import dev.huawei2api.App
 import dev.huawei2api.gateway.Upstream
+import dev.huawei2api.service.FloatService
 import dev.huawei2api.service.GatewayService
 import dev.huawei2api.service.Logs
 import kotlinx.coroutines.CoroutineScope
@@ -549,6 +550,22 @@ class MainActivity : android.app.Activity() {
             addView(editRow("访问密钥", prefs.apiKey, "留空则不校验") { v -> prefs.apiKey = v; toast("已保存") })
             addView(switchRow("允许局域网访问（0.0.0.0）", prefs.lanAccess, "不勾选时仅监听 127.0.0.1") { prefs.lanAccess = it })
             addView(switchRow("开机自动启动", prefs.autoStart) { prefs.autoStart = it })
+            addView(switchRow("悬浮球保活", prefs.floatOn, "拖动移动，点击启停，长按隐藏") { on ->
+                prefs.floatOn = on
+                if (on) {
+                    if (!Settings.canDrawOverlays(this)) {
+                        toast("请先授予悬浮窗权限")
+                        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")))
+                        prefs.floatOn = false
+                    } else {
+                        FloatService.show(this)
+                    }
+                } else {
+                    FloatService.hide(this)
+                }
+                buildLayout()
+            })
         })
         return c
     }
