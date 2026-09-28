@@ -39,6 +39,23 @@ class Prefs(ctx: Context) {
         get() = sp.getString("userName", "") ?: ""
         set(v) = sp.edit().putString("userName", v).apply()
 
+    // ---------- 悬浮球 ----------
+    var floatOn: Boolean
+        get() = sp.getBoolean("floatOn", false)
+        set(v) = sp.edit().putBoolean("floatOn", v).apply()
+
+    var floatSize_: Int
+        get() = sp.getInt("floatSize", 44)
+        set(v) = sp.edit().putInt("floatSize", v).apply()
+
+    var floatX_: Int
+        get() = sp.getInt("floatX", 40)
+        set(v) = sp.edit().putInt("floatX", v).apply()
+
+    var floatY_: Int
+        get() = sp.getInt("floatY", 320)
+        set(v) = sp.edit().putInt("floatY", v).apply()
+
     companion object {
         const val BASE = "https://devcloud.cn-north-4.huaweicloud.com"
     }
