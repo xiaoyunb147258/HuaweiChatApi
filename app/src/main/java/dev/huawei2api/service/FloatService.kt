@@ -48,7 +48,7 @@ class FloatService : Service() {
         val size = dp(App.prefs.floatSize_)
 
         val root = FrameLayout(this)
-        val dot = object : View(this) {
+        val dot = object : View(this@FloatService) {
             private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2563EB") }
             override fun onDraw(canvas: Canvas) {
                 val r = (minOf(width, height) / 2f) - dp(2)
@@ -144,19 +144,6 @@ class FloatService : Service() {
         val port = App.prefs.port
         label?.post { label?.text = if (running) port.toString() else "关" }
     }
-
-    private fun hideBall() {
-        ball?.let { try { wm?.removeView(it) } catch (_: Exception) {} }
-        ball = null
-    }
-
-    override fun onDestroy() {
-        hideBall()
-        instance = null
-        super.onDestroy()
-    }
-
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private fun hideBall() {
         ball?.let { try { wm?.removeView(it) } catch (_: Exception) {} }
