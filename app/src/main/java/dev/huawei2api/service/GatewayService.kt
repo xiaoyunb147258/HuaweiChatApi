@@ -45,7 +45,13 @@ class GatewayService : Service() {
         try {
             s.start()
             server = s
-            Logs.add("网关启动 ${if (p.lanAccess) "0.0.0.0" else "127.0.0.1"}:${p.port}")
+            val host = if (p.lanAccess) "0.0.0.0" else "127.0.0.1"
+            Logs.add("网关启动 $host:${p.port}")
+            Logs.add("本机地址 http://127.0.0.1:${p.port}/v1")
+            if (p.lanAccess) {
+                localIpv4()?.let { Logs.add("局域网 http://$it:${p.port}/v1") }
+            }
+            Logs.add("API Key ${if (p.apiKey.isEmpty()) "未设置(不校验)" else "已设置"}")
             instance?.onState?.invoke(true)
             FloatService.instance?.refresh()
         } catch (e: Exception) {
@@ -54,6 +60,17 @@ class GatewayService : Service() {
             FloatService.instance?.refresh()
             stopSelf()
         }
+    }
+
+    /** 取本机局域网 IPv4，用于在日志里直接给出可复制的地址 */
+    private fun localIpv4(): String? {
+        return try {
+            java.net.NetworkInterface.getNetworkInterfaces().toList()
+                .filter { it.isUp && !it.isLoopback }
+                .flatMap { it.inetAddresses.toList() }
+                .filterIsInstance<java.net.Inet4Address>()
+                .firstOrNull()?.hostAddress
+        } catch (e: Exception) { null }
     }
 
     private fun stopGateway() {
