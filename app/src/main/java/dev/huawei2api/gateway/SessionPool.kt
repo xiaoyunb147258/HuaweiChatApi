@@ -4,19 +4,22 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * OpenAI 会话 → 华为云 sessionId 映射。
- * OpenAI 的 session 概念由客户端自带（无则用首条消息 hash），
- * 这里把两者绑定，实现多轮上下文。
+ * 华为云要求 sessionId 必须先通过 /v1/cloudagent/sessions 创建，不能自造。
  */
 object SessionPool {
     private val map = ConcurrentHashMap<String, String>()
 
-    fun resolve(openAiSessionKey: String?): String {
-        if (openAiSessionKey.isNullOrBlank()) return Upstream.newSessionId()
-        return map.getOrPut(openAiSessionKey) { Upstream.newSessionId() }
+    /** 取或建：首次访问时真实创建华为云会话 */
+    fun resolve(key: String?, create: () -> String): String {
+        if (key.isNullOrBlank()) return create()
+        map[key]?.let { return it }
+        return synchronized(this) {
+            map[key] ?: create().also { map[key] = it }
+        }
     }
 
-    fun bind(key: String, huaweiSessionId: String) {
-        map[key] = huaweiSessionId
+    fun invalidate(key: String) {
+        map.remove(key)
     }
 
     fun clear() = map.clear()
