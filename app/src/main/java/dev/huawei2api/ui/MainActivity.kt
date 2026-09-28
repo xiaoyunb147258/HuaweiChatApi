@@ -587,16 +587,16 @@ class MainActivity : android.app.Activity() {
             addView(switchRow("悬浮球保活", prefs.floatOn, "拖动移动，点击启停，长按隐藏") { on ->
                 prefs.floatOn = on
                 if (on) {
-                    if (!Settings.canDrawOverlays(this)) {
+                    if (!Settings.canDrawOverlays(this@MainActivity)) {
                         toast("请先授予悬浮窗权限")
                         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                             Uri.parse("package:$packageName")))
                         prefs.floatOn = false
                     } else {
-                        FloatService.show(this)
+                        FloatService.show(this@MainActivity)
                     }
                 } else {
-                    FloatService.hide(this)
+                    FloatService.hide(this@MainActivity)
                 }
                 buildLayout()
             })
