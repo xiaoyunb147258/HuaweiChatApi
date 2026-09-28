@@ -145,24 +145,23 @@ class GatewayServer(
             jsonError(s, 400, "invalid_request", "No user message found."); return
         }
 
-        // 会话绑定：优先 client 传入的 session_id，否则用首条消息 hash
+        // 会话绑定：优先 client 传入的 session_id，否则用首条消息 hash。
+        // 华为云要求 sessionId 必须先真实创建，不能自造 UUID。
         val sessionKey = req.optString("session_id").ifBlank {
             req.optString("user").ifBlank { messages.getJSONObject(0).optString("content").take(64) }
         }
-        val sessionId = SessionPool.resolve(sessionKey)
+        val sessionId = SessionPool.resolve(sessionKey) {
+            val newId = upstream.createSession()
+            log("新建上游会话 $newId")
+            newId
+        }
         val id = "chatcmpl-" + System.currentTimeMillis().toString(36)
-        log("POST /v1/chat/completions model=$model stream=$stream len=${prompt.length}")
+        log("→ model=$model stream=$stream 会话=${sessionId.take(8)}")
 
         if (stream) {
-            val out = BufferedWriter(OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8))
-            s.getOutputStream().let {
-                val hdr = "HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: text/event-stream; charset=utf-8\r\n" +
-                    "Cache-Control: no-cache\r\n" +
-                    "Connection: keep-alive\r\n\r\n"
-                it.write(hdr.toByteArray()); it.flush()
-            }
             val mapper = SseMapper(id, model)
+            writeSseHeader(s)
+            val out = BufferedWriter(OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8))
             try {
                 upstream.sendMessage(sessionId, prompt, model) { ev, data ->
                     val out2 = mapper.map(ev, data)
@@ -170,10 +169,13 @@ class GatewayServer(
                 }
                 val tail = mapper.finish()
                 if (tail.isNotEmpty()) { out.write(tail); out.flush() }
+                log("← 流式完成")
             } catch (e: Exception) {
                 log("流异常: ${e.message}")
-                out.write("data: {\"error\":{\"message\":\"upstream_error: ${e.message?.take(120)}\"}}\n\n")
-                out.write("data: [DONE]\n\n"); out.flush()
+                try {
+                    out.write("data: {\"error\":{\"message\":\"upstream_error: ${e.message?.take(120)}\"}}\n\n")
+                    out.write("data: [DONE]\n\n"); out.flush()
+                } catch (_: Exception) {}
             }
         } else {
             val collector = SseMapper.Collector(id, model)
@@ -201,6 +203,15 @@ class GatewayServer(
         } catch (e: Exception) {
             jsonError(s, 502, "upstream_error", e.message ?: "failed")
         }
+    }
+
+    private fun writeSseHeader(s: Socket) {
+        val hdr = "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: text/event-stream; charset=utf-8\r\n" +
+            "Cache-Control: no-cache\r\n" +
+            "Connection: close\r\n" +
+            "X-Accel-Buffering: no\r\n\r\n"
+        s.getOutputStream().apply { write(hdr.toByteArray()); flush() }
     }
 
     private fun write(s: Socket, code: Int, type: String, body: String) {
