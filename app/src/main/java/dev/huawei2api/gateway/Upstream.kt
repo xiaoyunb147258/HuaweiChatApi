@@ -23,11 +23,10 @@ class Upstream(private val cookieProvider: () -> String) {
             "cftk" to cftk(),
             "maas-type" to "benefit",
             "Cookie" to cookieProvider(),
+            // 复用陈旧 keep-alive 连接会抛 Broken pipe，强制每次新建连接
+            "Connection" to "close",
         )
-        if (sse) {
-            h["Accept"] = "text/event-stream"
-            h["x-auth-token"] = ""
-        }
+        if (sse) h["Accept"] = "text/event-stream"
         if (agentType != null) h["Agent-Type"] = agentType
         return h
     }
@@ -44,6 +43,9 @@ class Upstream(private val cookieProvider: () -> String) {
         }
         return conn
     }
+
+    /** 原始上游行回调，用于排查事件格式不符（仅前若干行，避免刷屏） */
+    var rawLogger: ((String) -> Unit)? = null
 
     /** 发消息（SSE 流），回调每条 (event, data) */
     fun sendMessage(sessionId: String, content: String, modelId: String, onEvent: (String, String) -> Unit) {
@@ -62,13 +64,16 @@ class Upstream(private val cookieProvider: () -> String) {
             throw RuntimeException("Upstream $code: ${err.take(300)}")
         }
 
+        var rawLeft = 25
+        var eventSeen = false
         conn.inputStream.bufferedReader().use { br ->
             var event = ""
             var data: StringBuilder? = null
             while (true) {
                 val line = br.readLine() ?: break
+                if (rawLeft > 0) { rawLogger?.invoke("‹ $line"); rawLeft-- }
                 when {
-                    line.startsWith("event:") -> event = line.substring(6).trim()
+                    line.startsWith("event:") -> { event = line.substring(6).trim(); eventSeen = true }
                     line.startsWith("data:") -> {
                         if (data == null) data = StringBuilder()
                         data.append(line.substring(5).trim())
@@ -79,6 +84,8 @@ class Upstream(private val cookieProvider: () -> String) {
                     }
                 }
             }
+            // 流结束但一条事件都没解析出来 → 格式不符，必须暴露原因
+            if (!eventSeen) rawLogger?.invoke("‹ 警告: 未发现任何 event: 行，格式可能不符")
         }
     }
 
