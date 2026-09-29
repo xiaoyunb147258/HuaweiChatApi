@@ -386,8 +386,10 @@ class MainActivity : android.app.Activity() {
         val cm = CookieManager.getInstance()
         val cookies = cm.getCookie("https://devcloud.cn-north-4.huaweicloud.com") ?: ""
         if (cookies.contains("devclouddevuibjtcftk")) {
+            val changed = cookies != prefs.cookie
             prefs.cookie = cookies
-            Logs.add("已同步登录态")
+            // 只在登录态变化时记录，避免每次刷新都刷屏
+            if (changed) Logs.add("已同步登录态")
             // 拉一次用户名
             scope.launch {
                 try {
@@ -605,7 +607,7 @@ class MainActivity : android.app.Activity() {
                 } else {
                     FloatService.hide(this@MainActivity)
                 }
-                buildLayout()
+                // 只重渲染当前页：重建整棵树会清空内容，导致必须手点一次才恢复
                 selectTab(current)
             })
         })
