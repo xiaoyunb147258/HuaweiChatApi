@@ -25,7 +25,14 @@ class SseMapper(
             .append("\",\"object\":\"chat.completion.chunk\",\"created\":").append(created)
             .append(",\"model\":\"").append(model).append("\",\"choices\":[{")
         if (!sentFirst.getAndSet(true)) {
-            sb.append("\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},")
+            // 首帧需声明 role，但绝不能把真实内容替换掉：
+            // 上游若直接给 message（无 thought），丢弃首条就是「AI 不回复」
+            if (deltaJson == "{}") {
+                sb.append("\"index\":0,\"delta\":{\"role\":\"assistant\"},")
+            } else {
+                sb.append("\"index\":0,\"delta\":{\"role\":\"assistant\",")
+                    .append(deltaJson.removePrefix("{"))
+            }
         } else {
             sb.append("\"index\":0,\"delta\":").append(deltaJson).append(',')
         }
