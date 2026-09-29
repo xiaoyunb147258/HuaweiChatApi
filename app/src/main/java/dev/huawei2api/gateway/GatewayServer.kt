@@ -159,8 +159,14 @@ class GatewayServer(
             req.optString("user").ifBlank { messages.getJSONObject(0).optString("content").take(64) }
         }
         val sessionId = SessionPool.resolve(sessionKey) {
-            val newId = upstream.createSession()
-            log("新建上游会话 $newId")
+            // 真实创建优先；失败则自造 UUID（华为云允许前端直接生成）
+            val newId = try {
+                upstream.createSession()
+            } catch (e: Exception) {
+                log("创建会话失败(${e.message})，回退自造 UUID")
+                java.util.UUID.randomUUID().toString()
+            }
+            log("上游会话 ${newId.take(8)}")
             newId
         }
         val id = "chatcmpl-" + System.currentTimeMillis().toString(36)
@@ -168,22 +174,49 @@ class GatewayServer(
 
         if (stream) {
             val mapper = SseMapper(id, model)
+            // 上游原始行前若干条记入日志，转出异常时可直接看到原因
+            var rawLeft = 12
+            upstream.rawLogger = { line ->
+                if (rawLeft > 0) { rawLeft--; log("  ‹ ${line.take(110)}") }
+            }
             writeSseHeader(s)
             val out = BufferedWriter(OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8))
+            // 客户端常按「首字节超时」判死；上游思考可能十几秒，故先发一帧再等
+            out.write(": connected\n\n"); out.flush()
+
+            val stopBeat = java.util.concurrent.atomic.AtomicBoolean(false)
+            val beat = Thread {
+                try {
+                    while (!stopBeat.get()) {
+                        Thread.sleep(5000)
+                        if (stopBeat.get()) break
+                        synchronized(out) { out.write(": ping\n\n"); out.flush() }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            beat.isDaemon = true
+            beat.start()
+
             try {
                 upstream.sendMessage(sessionId, prompt, model) { ev, data ->
-                    val out2 = mapper.map(ev, data)
-                    if (out2.isNotEmpty()) { out.write(out2); out.flush() }
+                    val chunk = mapper.map(ev, data)
+                    if (chunk.isNotEmpty()) synchronized(out) { out.write(chunk); out.flush() }
                 }
                 val tail = mapper.finish()
-                if (tail.isNotEmpty()) { out.write(tail); out.flush() }
+                if (tail.isNotEmpty()) synchronized(out) { out.write(tail); out.flush() }
                 log("← 流式完成")
             } catch (e: Exception) {
                 log("流异常: ${e.message}")
                 try {
-                    out.write("data: {\"error\":{\"message\":\"upstream_error: ${e.message?.take(120)}\"}}\n\n")
-                    out.write("data: [DONE]\n\n"); out.flush()
+                    synchronized(out) {
+                        out.write("data: {\"error\":{\"message\":\"upstream_error: ${e.message?.take(120)}\"}}\n\n")
+                        out.write("data: [DONE]\n\n"); out.flush()
+                    }
                 } catch (_: Exception) {}
+            } finally {
+                stopBeat.set(true)
+                upstream.rawLogger = null
             }
         } else {
             val collector = SseMapper.Collector(id, model)
