@@ -27,7 +27,8 @@ class Upstream(private val cookieProvider: () -> String) {
             "Connection" to "close",
         )
         if (sse) h["Accept"] = "text/event-stream"
-        if (agentType != null) h["Agent-Type"] = agentType
+        // Agent-Type 必须始终携带：实测缺失直接 400 TM.00001001
+        h["Agent-Type"] = agentType ?: "CodeBase"
         return h
     }
 
