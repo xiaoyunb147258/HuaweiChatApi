@@ -140,7 +140,10 @@ class GatewayServer(
             jsonError(s, 400, "invalid_request", "'messages' is required."); return
         }
 
-        val model = req.optString("model", App.prefs.defaultModel).ifBlank { App.prefs.defaultModel }
+        // 客户端模型名绝不能透传：上游只认固定 ID，
+        // 传 gpt-4 / gpt-3.5-turbo 等会直接回 unsupported model 导致整条流失败
+        val cliModel = req.optString("model").ifBlank { App.prefs.defaultModel }
+        val model = App.prefs.defaultModel.ifBlank { "deepseek-v4-flash-0731" }
         val stream = req.optBoolean("stream", false)
 
         // 取最后一条 user 消息作为本次输入
@@ -170,6 +173,7 @@ class GatewayServer(
             newId
         }
         val id = "chatcmpl-" + System.currentTimeMillis().toString(36)
+        if (cliModel != model) log("模型映射 $cliModel → $model")
         log("→ model=$model stream=$stream 会话=${sessionId.take(8)}")
 
         if (stream) {
